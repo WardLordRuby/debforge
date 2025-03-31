@@ -18,7 +18,7 @@ pub(super) trait CowExt {
     fn as_path(&self) -> &Path;
 }
 
-impl CowExt for Cow<'static, str> {
+impl CowExt for Cow<'_, str> {
     fn as_path(&self) -> &Path {
         match self {
             &Cow::Borrowed(str) => Path::new(str),
@@ -61,6 +61,7 @@ pub(super) enum FileType {
     Control,
     Changelog,
     Copyright,
+    Binary,
 
     // optional
     Icon64,
@@ -105,10 +106,14 @@ impl FileType {
         })
     }
 
-    pub(super) fn is_icon(self) -> bool {
-        matches!(
+    pub(super) fn is_text(self) -> bool {
+        !matches!(
             self,
-            FileType::Icon64 | FileType::Icon128 | FileType::Icon256 | FileType::Icon512
+            FileType::Icon64
+                | FileType::Icon128
+                | FileType::Icon256
+                | FileType::Icon512
+                | FileType::Binary
         )
     }
 
@@ -132,11 +137,12 @@ impl FileType {
         }
     }
 
-    pub(super) fn output_file_name(self, linux_binary_name: &str) -> Cow<'static, str> {
+    pub(super) fn output_file_name(self, linux_binary_name: &str) -> Cow<'_, str> {
         match self {
             FileType::Control => Cow::Borrowed("control"),
             FileType::Changelog => Cow::Borrowed("changelog"),
             FileType::Copyright => Cow::Borrowed("copyright"),
+            FileType::Binary => Cow::Borrowed(linux_binary_name),
             FileType::Icon64 | FileType::Icon128 | FileType::Icon256 | FileType::Icon512 => {
                 Cow::Owned(format!("{linux_binary_name}.png"))
             }
@@ -158,6 +164,14 @@ impl FileType {
 }
 
 impl Variables {
+    /// Binary source path
+    pub(super) fn get_binary_path(&self) -> PathBuf {
+        let mut out = self.project_dir.join(self.architecture.platform_bin_path());
+        out.push(&self.binary_name);
+        out
+    }
+
+    /// Output paths
     pub(super) fn get_file_type_path(&self, file_type: FileType) -> PathBuf {
         let mut out = self.project_dir.join(format!(
             "build/tmp/dist/linux/{}-{}",
@@ -175,9 +189,10 @@ impl Variables {
                 "usr/share/icons/hicolor/{}/apps",
                 icon.resolution()
             )),
-            FileType::Desktop => {
-                out.push(format!("usr/share/applications/{}", self.linux_binary_name))
+            FileType::Binary => {
+                out.push("usr/local/bin");
             }
+            FileType::Desktop => out.push("usr/share/applications"),
             FileType::Format => out.push("DEBIAN/source"),
             _ => out.push("DEBIAN"),
         }
