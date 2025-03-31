@@ -11,18 +11,17 @@ use std::{
 use crate::args::*;
 use deb_files::*;
 
-const PROJECT_ENV_VAR: &str = "PROJ_DIR";
+pub(crate) const PKG_NAME: &str = env!("CARGO_PKG_NAME");
+
 const TEMP_DIR: &str = "tmp";
-const BUILD_DIR: &str = "build";
 const SEARCH_DIRS: [SearchDir; 3] = [SearchDir::Assets, SearchDir::Build, SearchDir::Debian];
 const REQUIRED_DEB_FILES: [FileType; 3] =
     [FileType::Control, FileType::Changelog, FileType::Copyright];
 
-const PKG_NAME: &str = env!("CARGO_PKG_NAME");
-
+#[macro_export]
 macro_rules! exit_err {
     ($($arg:tt)*) => {{
-        eprint!("{PKG_NAME}: Error ");
+        eprint!("{}: Error ", $crate::forge::PKG_NAME);
         eprintln!($($arg)*);
         std::process::exit(1);
     }};
@@ -107,25 +106,6 @@ impl DebCollector for DebFiles {
     }
 }
 
-fn locate_valid_project_dir() -> PathBuf {
-    let curr_dir = env::var(PROJECT_ENV_VAR)
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| env::current_dir().unwrap());
-
-    if !curr_dir.is_dir() {
-        exit_err!(
-            "Error: {} is not a valid project directory",
-            curr_dir.display()
-        )
-    }
-
-    if curr_dir.file_name().unwrap() == BUILD_DIR {
-        return curr_dir.parent().unwrap().to_owned();
-    }
-
-    curr_dir
-}
-
 #[derive(Clone, Copy)]
 enum SearchDir {
     Assets,
@@ -205,11 +185,10 @@ impl Forge {
     }
 
     pub fn from(mut args: Args) -> io::Result<Self> {
-        let project_dir = locate_valid_project_dir();
         let mut deb_files = HashMap::new();
         let mut toml_found = false;
 
-        for entry in fs::read_dir(&project_dir)? {
+        for entry in fs::read_dir(&args.project_dir)? {
             let entry = entry?;
             let file_type = entry.file_type()?;
             let file_name = entry.file_name();
@@ -250,7 +229,7 @@ impl Forge {
 
         let project = Self {
             vars: Variables {
-                project_dir,
+                project_dir: args.project_dir,
                 linux_binary_name: binary_name.replace('_', "-"),
                 binary_name,
                 version: args.version.unwrap(),

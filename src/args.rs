@@ -1,3 +1,11 @@
+use std::{
+    env,
+    path::{Path, PathBuf},
+};
+
+use crate::exit_err;
+
+const BUILD_DIR: &str = "build";
 const ARGS: [&str; 10] = [
     "-h",
     "--help",
@@ -14,6 +22,7 @@ const ARGS: [&str; 10] = [
 pub struct Args {
     pub binary_name: Option<String>,
     pub version: Option<String>,
+    pub project_dir: PathBuf,
     pub architecture: Architecture,
     pub dry_run: bool,
 }
@@ -32,8 +41,7 @@ impl From<String> for Architecture {
             "x86_64-unknown-linux-gnu" | "amd" | "x86" | "x86_64" => Self::Amd64,
             "aarch64-unknown-linux-gnu" | "arm" | "aarch64" => Self::Arm64,
             _ => {
-                eprintln!("Error: Invalid target/architecture: {value}");
-                std::process::exit(1);
+                exit_err!("Invalid target/architecture: {value}");
             }
         }
     }
@@ -56,22 +64,64 @@ impl Architecture {
 }
 
 impl Args {
-    fn validate_name(name: &String) {
-        if ARGS.iter().any(|arg| name == arg) {
-            panic!("Error: --binary-name requires an input")
+    fn ensure_unique(str: &str, from: &'static str) {
+        if ARGS.iter().any(|&arg| arg == str) {
+            exit_err!("{from} requires an input")
         }
     }
 
+    #[allow(clippy::ptr_arg)]
+    fn validate_name(name: &String) {
+        Self::ensure_unique(name, "--binary-name");
+    }
+
     fn validate_version(version: &String) {
+        Self::ensure_unique(version, "--version");
         for num_str in version.split('.') {
             if num_str.parse::<u16>().is_err() {
-                panic!("Error: invalid version: '{version}'")
+                exit_err!("invalid version: '{version}'")
             }
         }
     }
 
+    fn validate_path(name: String) -> PathBuf {
+        Self::ensure_unique(&name, "--project-path");
+        let path = PathBuf::from(name);
+
+        if path.is_file() {
+            exit_err!("Path must be a directory")
+        }
+
+        let exist_err = |path: &Path| exit_err!("{} does not exist", path.display());
+
+        if path.is_absolute() {
+            if path.exists() {
+                return path;
+            }
+            exist_err(&path)
+        }
+
+        let mut curr_dir = env::current_dir().unwrap();
+        curr_dir.push(path);
+
+        if !curr_dir.exists() {
+            exist_err(&curr_dir)
+        }
+        curr_dir
+    }
+
+    fn locate_valid_project_dir() -> PathBuf {
+        let curr_dir = env::current_dir().unwrap();
+
+        if curr_dir.file_name().unwrap() == BUILD_DIR {
+            return curr_dir.parent().unwrap().to_owned();
+        }
+
+        curr_dir
+    }
+
     pub fn parse() -> Self {
-        let (mut binary_name, mut target, mut version) = (None, None, None);
+        let (mut binary_name, mut target, mut version, mut project_dir) = (None, None, None, None);
         let mut dry_run = false;
 
         let mut args = std::env::args().skip(1);
@@ -83,16 +133,38 @@ impl Args {
                         [-b binary-name](optional | default: will attempt to parse Cargo.toml)\n    \
                         [-v version](optional | default: will attempt to parse Cargo.toml)\n    \
                         [-t target](optional | default: x86_64-unknown-linux-gnu)\n    \
+                        [-p project-path](optional | default: current directory)\n    \
                         [-d dry-run](optional | will display all found relevant deb files)"
                     );
                     std::process::exit(0);
                 }
-                "-b" | "--binary-name" => binary_name = args.next().inspect(Self::validate_name),
-                "-v" | "--version" => version = args.next().inspect(Self::validate_version),
-                "-t" | "--target" => target = args.next().map(Architecture::from),
+                "-b" | "--binary-name" => {
+                    binary_name = args.next().inspect(Self::validate_name);
+                    if binary_name.is_none() {
+                        exit_err!("--binary-name requires an input")
+                    }
+                }
+                "-v" | "--version" => {
+                    version = args.next().inspect(Self::validate_version);
+                    if version.is_none() {
+                        exit_err!("--version requires an input")
+                    }
+                }
+                "-p" | "--project-path" => {
+                    project_dir = args.next().map(Self::validate_path);
+                    if project_dir.is_none() {
+                        exit_err!("--project-path requires an input")
+                    }
+                }
+                "-t" | "--target" => {
+                    target = args.next().map(Architecture::from);
+                    if target.is_none() {
+                        exit_err!("--target requires an input")
+                    }
+                }
                 "-d" | "--dry-run" => dry_run = true,
                 _ => {
-                    panic!("Error: unknown argument: {arg}");
+                    exit_err!("unknown argument: {arg}");
                 }
             }
         }
@@ -100,6 +172,7 @@ impl Args {
         Args {
             binary_name,
             version,
+            project_dir: project_dir.unwrap_or_else(Self::locate_valid_project_dir),
             dry_run,
             architecture: target.unwrap_or_default(),
         }
