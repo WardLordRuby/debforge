@@ -7,11 +7,11 @@ use std::{
 use super::Variables;
 
 const ICON_FORMATS: [&str; 5] = ["png", "jpg", "jpeg", "tiff", "svg"];
-const ICON_SIZES: [(&str, FileType); 4] = [
-    ("64", FileType::Icon64),
-    ("128", FileType::Icon128),
-    ("256", FileType::Icon256),
-    ("512", FileType::Icon512),
+const ICONS: [FileType; 4] = [
+    FileType::Icon64,
+    FileType::Icon128,
+    FileType::Icon256,
+    FileType::Icon512,
 ];
 
 pub(super) trait CowExt {
@@ -42,9 +42,10 @@ impl DebParser for &DirEntry {
             }
 
             if ICON_FORMATS.iter().any(|&fmt| extension == fmt) {
-                return ICON_SIZES
+                return ICONS
                     .iter()
-                    .find_map(|&(size, f_type)| name_str.contains(size).then_some(f_type));
+                    .find(|&icon| name_str.contains(icon.width()))
+                    .copied();
             }
 
             return None;
@@ -111,7 +112,17 @@ impl FileType {
         )
     }
 
-    fn icon_res(self) -> &'static str {
+    fn width(self) -> &'static str {
+        match self {
+            FileType::Icon64 => "64",
+            FileType::Icon128 => "128",
+            FileType::Icon256 => "256",
+            FileType::Icon512 => "512",
+            _ => unreachable!("Only icons have widths"),
+        }
+    }
+
+    fn resolution(self) -> &'static str {
         match self {
             FileType::Icon64 => "64x64",
             FileType::Icon128 => "128x128",
@@ -160,9 +171,10 @@ impl Variables {
             icon @ (FileType::Icon64
             | FileType::Icon128
             | FileType::Icon256
-            | FileType::Icon512) => {
-                out.push(format!("usr/share/icons/hicolor/{}/apps", icon.icon_res()))
-            }
+            | FileType::Icon512) => out.push(format!(
+                "usr/share/icons/hicolor/{}/apps",
+                icon.resolution()
+            )),
             FileType::Desktop => {
                 out.push(format!("usr/share/applications/{}", self.linux_binary_name))
             }

@@ -15,10 +15,24 @@ const PROJECT_ENV_VAR: &str = "PROJ_DIR";
 const TEMP_DIR: &str = "tmp";
 const BUILD_DIR: &str = "build";
 const SEARCH_DIRS: [SearchDir; 3] = [SearchDir::Assets, SearchDir::Build, SearchDir::Debian];
+const REQUIRED_DEB_FILES: [FileType; 3] =
+    [FileType::Control, FileType::Changelog, FileType::Copyright];
+
+const PKG_NAME: &str = env!("CARGO_PKG_NAME");
+
+macro_rules! exit_err {
+    ($($arg:tt)*) => {{
+        eprint!("{PKG_NAME}: Error ");
+        eprintln!($($arg)*);
+        std::process::exit(1);
+    }};
+}
+
+type DebFiles = HashMap<FileType, PathBuf>;
 
 pub struct Forge {
     vars: Variables,
-    files: PackageFiles,
+    files: DebFiles,
 }
 
 struct Variables {
@@ -40,7 +54,7 @@ impl Variables {
         ]
     }
 
-    fn write_file(&self, input: &Path, file_type: FileType) -> io::Result<()> {
+    fn write_file(&self, file_type: FileType, input: &Path) -> io::Result<()> {
         let mut output_dir = self.get_file_type_path(file_type);
         fs::create_dir_all(&output_dir)?;
         output_dir.push(
@@ -76,19 +90,6 @@ impl Variables {
     }
 }
 
-type DebFiles = HashMap<FileType, PathBuf>;
-
-struct PackageFiles {
-    required: [(FileType, PathBuf); 3],
-    optional: DebFiles,
-}
-
-impl PackageFiles {
-    fn len(&self) -> usize {
-        self.required.len() + self.optional.len()
-    }
-}
-
 trait DebCollector {
     fn try_insert_deb(&mut self, entry: &DirEntry, dry_run: bool);
 }
@@ -97,7 +98,7 @@ impl DebCollector for DebFiles {
     fn try_insert_deb(&mut self, entry: &DirEntry, dry_run: bool) {
         if let Some(deb_file) = entry.debian_file() {
             if self.insert(deb_file, entry.path()).is_some() {
-                panic!("Error: found more than 1 {deb_file:?} file")
+                exit_err!("Error: found more than 1 {deb_file:?} file")
             }
             if dry_run {
                 println!("Found {deb_file:?} file")
@@ -112,7 +113,7 @@ fn locate_valid_project_dir() -> PathBuf {
         .unwrap_or_else(|_| env::current_dir().unwrap());
 
     if !curr_dir.is_dir() {
-        panic!(
+        exit_err!(
             "Error: {} is not a valid project directory",
             curr_dir.display()
         )
@@ -233,24 +234,19 @@ impl Forge {
 
         if args.binary_name.is_none() || args.version.is_none() {
             if toml_found {
-                panic!("Error: Failed to parse Cargo.toml")
+                exit_err!("Failed to parse Cargo.toml")
             } else {
-                panic!("Error: Could not find Cargo.toml")
+                exit_err!("Could not find Cargo.toml")
             }
         }
 
         let binary_name = args.binary_name.unwrap();
-        let required = [
-            deb_files
-                .remove_entry(&FileType::Control)
-                .expect("Error: Could not locate a control file"),
-            deb_files
-                .remove_entry(&FileType::Changelog)
-                .expect("Error: Could not locate a changelog file"),
-            deb_files
-                .remove_entry(&FileType::Copyright)
-                .expect("Error: Could not find copyright file"),
-        ];
+
+        for required in REQUIRED_DEB_FILES.iter() {
+            if !deb_files.contains_key(required) {
+                exit_err!("Could not locate a {required:?} file")
+            }
+        }
 
         let project = Self {
             vars: Variables {
@@ -260,14 +256,11 @@ impl Forge {
                 version: args.version.unwrap(),
                 architecture: args.architecture,
             },
-            files: PackageFiles {
-                required,
-                optional: deb_files,
-            },
+            files: deb_files,
         };
 
         if args.dry_run {
-            println!("Valid project file structure");
+            println!("{PKG_NAME}: Success valid project file structure");
             std::process::exit(0)
         }
 
@@ -275,12 +268,14 @@ impl Forge {
     }
 
     pub fn forge(self) -> io::Result<()> {
-        let total = self.files.len();
-        for (file, path) in self.files.required.into_iter().chain(self.files.optional) {
-            self.vars.write_file(&path, file)?
+        for (&file, path) in self.files.iter() {
+            self.vars.write_file(file, path)?
         }
 
-        println!("Successfully imported {total} files");
+        println!(
+            "{PKG_NAME}: Successfully imported {} files",
+            self.files.len()
+        );
         Ok(())
     }
 }
