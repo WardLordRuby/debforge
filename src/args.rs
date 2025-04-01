@@ -19,12 +19,6 @@ const ARGS: [&str; 10] = [
     "--dry-run",
 ];
 
-#[cfg(target_os = "linux")]
-const CURRENT_PLATFORM_BIN_PATH: &str = "target/release";
-
-const AMD_BIN_PATH: &str = "target/x86_64-unknown-linux-gnu/release";
-const ARM_BIN_PATH: &str = "target/aarch64-unknown-linux-gnu/release";
-
 pub struct Args {
     pub binary_name: Option<String>,
     pub version: Option<String>,
@@ -54,26 +48,6 @@ impl From<String> for Architecture {
 }
 
 impl Architecture {
-    /// Internal call use [`Variables::get_binary_path`]
-    pub(crate) const fn platform_bin_path(self) -> &'static str {
-        #[cfg(all(target_arch = "x86_64", target_os = "linux"))]
-        match self {
-            Architecture::Amd64 => CURRENT_PLATFORM_BIN_PATH,
-            Architecture::Arm64 => ARM_BIN_PATH,
-        }
-
-        #[cfg(all(target_arch = "aarch64", target_os = "linux"))]
-        match self {
-            Architecture::Amd64 => AMD_BIN_PATH,
-            Architecture::Arm64 => CURRENT_PLATFORM_BIN_PATH,
-        }
-
-        #[cfg(windows)]
-        match self {
-            Architecture::Amd64 => AMD_BIN_PATH,
-            Architecture::Arm64 => ARM_BIN_PATH,
-        }
-    }
     pub(crate) const fn target(self) -> &'static str {
         match self {
             Architecture::Amd64 => "x86_64-unknown-linux-gnu",

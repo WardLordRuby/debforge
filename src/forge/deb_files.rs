@@ -166,9 +166,11 @@ impl FileType {
 impl Variables {
     /// Binary source path
     pub(super) fn get_binary_path(&self) -> PathBuf {
-        let mut out = self.project_dir.join(self.architecture.platform_bin_path());
-        out.push(&self.binary_name);
-        out
+        self.project_dir.join(format!(
+            "target/{}/release/{}",
+            self.architecture.target(),
+            self.binary_name
+        ))
     }
 
     /// Output paths
