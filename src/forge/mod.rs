@@ -135,14 +135,17 @@ impl SearchDir {
         }
     }
 
-    fn scan(self, deb_files: &mut DebFiles, path: PathBuf, dry_run: bool) -> io::Result<()> {
-        for entry in fs::read_dir(&path)? {
+    fn scan<P>(self, directory: P, deb_files: &mut DebFiles, dry_run: bool) -> io::Result<()>
+    where
+        P: AsRef<Path>,
+    {
+        for entry in fs::read_dir(directory)? {
             let entry = entry?;
             let file_type = entry.file_type()?;
 
             match self {
                 SearchDir::Assets | SearchDir::Debian if file_type.is_dir() => {
-                    self.scan(deb_files, entry.path(), dry_run)?
+                    self.scan(entry.path(), deb_files, dry_run)?
                 }
                 SearchDir::Build if file_type.is_dir() => {
                     let file_name = entry.file_name();
@@ -150,7 +153,7 @@ impl SearchDir {
                         fs::remove_dir_all(entry.path())?;
                         println!("Reset contents of ~/build/tmp")
                     } else if file_name == SearchDir::Debian.name() {
-                        SearchDir::Debian.scan(deb_files, entry.path(), dry_run)?
+                        SearchDir::Debian.scan(entry.path(), deb_files, dry_run)?
                     }
                 }
                 _ if file_type.is_file() => deb_files.try_insert_deb(&entry, dry_run),
@@ -174,20 +177,16 @@ impl Forge {
             let line = line?;
             let line = line.trim();
 
-            if binary_name.is_none() {
-                if let Some(name) = line
-                    .strip_prefix("name = \"")
+            if let Some(Some(name)) = binary_name.is_none().then(|| {
+                line.strip_prefix("name = \"")
                     .and_then(|rest| rest.strip_suffix('\"'))
-                {
-                    *binary_name = Some(String::from(name))
-                }
-            } else if version.is_none() {
-                if let Some(version_str) = line
-                    .strip_prefix("version = \"")
+            }) {
+                *binary_name = Some(String::from(name))
+            } else if let Some(Some(version_str)) = version.is_none().then(|| {
+                line.strip_prefix("version = \"")
                     .and_then(|rest| rest.strip_suffix('\"'))
-                {
-                    *version = Some(String::from(version_str))
-                }
+            }) {
+                *version = Some(String::from(version_str))
             }
 
             if binary_name.is_some() && version.is_some() {
@@ -233,7 +232,7 @@ impl Forge {
             if file_type.is_dir() {
                 if let Some(search_dir) = SEARCH_DIRS.iter().find(|valid| file_name == valid.name())
                 {
-                    search_dir.scan(&mut deb_files, entry.path(), dry_run)?;
+                    search_dir.scan(entry.path(), &mut deb_files, dry_run)?;
                 }
             } else if file_type.is_file() {
                 deb_files.try_insert_deb(&entry, dry_run)

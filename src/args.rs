@@ -75,6 +75,7 @@ impl Args {
         Self::ensure_unique(name, "--binary-name");
     }
 
+    #[allow(clippy::ptr_arg)]
     fn validate_version(version: &String) {
         Self::ensure_unique(version, "--version");
         for num_str in version.split('.') {
