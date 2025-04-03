@@ -42,20 +42,71 @@ struct Variables {
     architecture: Architecture,
 }
 
-impl From<Args> for Variables {
-    fn from(args: Args) -> Self {
-        let binary_name = args.binary_name.unwrap();
-        Self {
-            project_dir: args.project_dir,
-            linux_binary_name: binary_name.replace('_', "-"),
-            binary_name,
-            version: args.version.unwrap(),
-            architecture: args.architecture,
+impl Args {
+    #[inline]
+    fn has_toml_fields(&self) -> bool {
+        self.binary_name.is_some() && self.version.is_some()
+    }
+
+    fn conditionally_parse_toml(&mut self) -> io::Result<()> {
+        if self.has_toml_fields() {
+            return Ok(());
         }
+
+        let toml = fs::File::open(self.project_dir.join("Cargo.toml"))?;
+        let reader = BufReader::new(toml);
+
+        for line in reader.lines() {
+            let line = line?;
+            let line = line.trim();
+
+            if let Some(Some(name)) = self.binary_name.is_none().then(|| {
+                line.strip_prefix("name = \"")
+                    .and_then(|rest| rest.strip_suffix('\"'))
+            }) {
+                self.binary_name = Some(String::from(name))
+            } else if let Some(Some(version_str)) = self.version.is_none().then(|| {
+                line.strip_prefix("version = \"")
+                    .and_then(|rest| rest.strip_suffix('\"'))
+            }) {
+                self.version = Some(String::from(version_str))
+            }
+
+            if self.has_toml_fields() {
+                break;
+            }
+        }
+
+        if !self.has_toml_fields() {
+            exit_err!("Failed to parse Cargo.toml")
+        }
+
+        if self.dry_run {
+            println!("Parsed Cargo.toml")
+        }
+
+        Ok(())
     }
 }
 
 impl Variables {
+    fn from(mut args: Args) -> io::Result<Self> {
+        args.conditionally_parse_toml()?;
+
+        let binary_name = args
+            .binary_name
+            .expect("`conditionally_parse_toml` will return early before this is `None`");
+        Ok(Self {
+            project_dir: args.project_dir,
+            linux_binary_name: binary_name.replace('_', "-"),
+            binary_name,
+            version: args
+                .version
+                .expect("`conditionally_parse_toml` will return early before this is `None`"),
+            architecture: args.architecture,
+        })
+    }
+
     fn replacements(&self) -> [(&'static str, &str); 5] {
         [
             ("$BinaryName", &self.binary_name),
@@ -98,16 +149,16 @@ impl Variables {
             output.write_all(line.as_bytes())?;
         }
 
-        Ok(())
+        output.flush()
     }
 }
 
 trait DebCollector {
-    fn try_insert_deb(&mut self, entry: &DirEntry, dry_run: bool);
+    fn conditional_insert(&mut self, entry: &DirEntry, dry_run: bool);
 }
 
 impl DebCollector for DebFiles {
-    fn try_insert_deb(&mut self, entry: &DirEntry, dry_run: bool) {
+    fn conditional_insert(&mut self, entry: &DirEntry, dry_run: bool) {
         if let Some(deb_file) = entry.debian_file() {
             if self.insert(deb_file, entry.path()).is_some() {
                 exit_err!("Found more than 1 {deb_file:?} file")
@@ -156,7 +207,7 @@ impl SearchDir {
                         SearchDir::Debian.scan(entry.path(), deb_files, dry_run)?
                     }
                 }
-                _ if file_type.is_file() => deb_files.try_insert_deb(&entry, dry_run),
+                _ if file_type.is_file() => deb_files.conditional_insert(&entry, dry_run),
                 _ => (),
             }
         }
@@ -165,52 +216,9 @@ impl SearchDir {
 }
 
 impl Forge {
-    fn parse_toml(
-        project_dir: &Path,
-        binary_name: &mut Option<String>,
-        version: &mut Option<String>,
-    ) -> io::Result<()> {
-        let toml = fs::File::open(project_dir.join("Cargo.toml"))?;
-        let reader = BufReader::new(toml);
-
-        for line in reader.lines() {
-            let line = line?;
-            let line = line.trim();
-
-            if let Some(Some(name)) = binary_name.is_none().then(|| {
-                line.strip_prefix("name = \"")
-                    .and_then(|rest| rest.strip_suffix('\"'))
-            }) {
-                *binary_name = Some(String::from(name))
-            } else if let Some(Some(version_str)) = version.is_none().then(|| {
-                line.strip_prefix("version = \"")
-                    .and_then(|rest| rest.strip_suffix('\"'))
-            }) {
-                *version = Some(String::from(version_str))
-            }
-
-            if binary_name.is_some() && version.is_some() {
-                break;
-            }
-        }
-        Ok(())
-    }
-
-    pub fn from(mut args: Args) -> io::Result<Self> {
+    pub fn from(args: Args) -> io::Result<Self> {
         let dry_run = args.dry_run;
-
-        if args.binary_name.is_none() || args.version.is_none() {
-            Self::parse_toml(&args.project_dir, &mut args.binary_name, &mut args.version)?;
-            if dry_run {
-                println!("Parsed Cargo.toml")
-            }
-        }
-
-        if args.binary_name.is_none() || args.version.is_none() {
-            exit_err!("Failed to parse Cargo.toml")
-        }
-
-        let vars = Variables::from(args);
+        let vars = Variables::from(args)?;
 
         let mut deb_files = HashMap::new();
 
@@ -227,15 +235,15 @@ impl Forge {
         for entry in fs::read_dir(&vars.project_dir)? {
             let entry = entry?;
             let file_type = entry.file_type()?;
-            let file_name = entry.file_name();
 
             if file_type.is_dir() {
+                let file_name = entry.file_name();
                 if let Some(search_dir) = SEARCH_DIRS.iter().find(|valid| file_name == valid.name())
                 {
                     search_dir.scan(entry.path(), &mut deb_files, dry_run)?;
                 }
             } else if file_type.is_file() {
-                deb_files.try_insert_deb(&entry, dry_run)
+                deb_files.conditional_insert(&entry, dry_run)
             }
         }
 

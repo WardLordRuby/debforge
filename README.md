@@ -1,6 +1,6 @@
 # debforge
 debforge is a command line tool that scans a project directory for common Deb package files automating the process
-of changing target architecture and writing modified files into the correct file structure.
+of changing common variables, eg. architecture, and writing modified files into the correct file structure.
 
 ### Arguments
 | Argument          | Short | Description                                             | Default                  |
@@ -18,7 +18,7 @@ The project directory will be located using the current directory, this can be o
 debforge will search the following directories for relevant debian files:
 | Directory                      | Recursive? | Description                                                     |
 | ------------------------------ | ---------- | --------------------------------------------------------------- |
-| current dir or `--package-dir` | ❌         | Looks for listed directories, `Cargo.toml`, and debian files    |
+| current dir or `--package-dir` | ❌         | Looks for listed directories, Cargo.toml, and debian files      |
 | `~/build/`                     | ❌         | Searches all files and looks for the debian directory           |
 | `~/assets/`                    | ✅         | Searches all files and subdirectories for icon assets           |
 | `~/debian/`                    | ✅         | Searches all files and subdirectories for debian files          |
@@ -26,8 +26,8 @@ debforge will search the following directories for relevant debian files:
 ### Supported variable names
 | Variable                | Source                                                   |
 | ----------------------- | -------------------------------------------------------- |
-| $BinaryName             | command line input or parsed from Cargo.toml             |
-| $LinuxBinaryName        | $BinaryName converted to kebab-case                      |
-| $Version                | command line input or parsed from Cargo.toml             |
-| $Target                 | command line input or default                            |
-| $Architecture           | inferred from target [amd6, arm64]                       |
+| `$BinaryName`           | command line input or parsed from Cargo.toml             |
+| `$LinuxBinaryName`      | `$BinaryName` converted to kebab-case                    |
+| `$Version`              | command line input or parsed from Cargo.toml             |
+| `$Target`               | command line input or default                            |
+| `$Architecture`         | inferred from `$Target` [amd64, arm64]                   |
