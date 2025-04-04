@@ -167,7 +167,7 @@ impl Variables {
     /// Binary source path
     pub(super) fn get_binary_path(&self) -> PathBuf {
         self.project_dir.join(format!(
-            "target/{}/release/{}",
+            "target\\{}\\release\\{}",
             self.architecture.target(),
             self.binary_name
         ))
@@ -176,26 +176,26 @@ impl Variables {
     /// Output paths
     pub(super) fn get_file_type_path(&self, file_type: FileType) -> PathBuf {
         let mut out = self.project_dir.join(format!(
-            "build/tmp/dist/linux/{}-{}",
+            "build\\tmp\\dist\\linux\\{}-{}",
             self.linux_binary_name, self.version
         ));
 
         match file_type {
             FileType::Changelog | FileType::Copyright => {
-                out.push(format!("usr/share/doc/{}", self.linux_binary_name))
+                out.push(format!("usr\\share\\doc\\{}", self.linux_binary_name))
             }
             icon @ (FileType::Icon64
             | FileType::Icon128
             | FileType::Icon256
             | FileType::Icon512) => out.push(format!(
-                "usr/share/icons/hicolor/{}/apps",
+                "usr\\share\\icons\\hicolor\\{}\\apps",
                 icon.resolution()
             )),
             FileType::Binary => {
-                out.push("usr/local/bin");
+                out.push("usr\\local\\bin");
             }
-            FileType::Desktop => out.push("usr/share/applications"),
-            FileType::Format => out.push("DEBIAN/source"),
+            FileType::Desktop => out.push("usr\\share\\applications"),
+            FileType::Format => out.push("DEBIAN\\source"),
             _ => out.push("DEBIAN"),
         }
         out

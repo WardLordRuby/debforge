@@ -53,23 +53,30 @@ impl Args {
             return Ok(());
         }
 
+        fn try_parse_field(line: &str, field: &'static str) -> Option<String> {
+            line.strip_prefix(field)
+                .map(|rest| rest.trim_matches([' ', '\'', '\"', '=']).to_string())
+        }
+
         let toml = fs::File::open(self.project_dir.join("Cargo.toml"))?;
         let reader = BufReader::new(toml);
 
         for line in reader.lines() {
             let line = line?;
-            let line = line.trim();
+            let line = line.trim_start();
 
-            if let Some(Some(name)) = self.binary_name.is_none().then(|| {
-                line.strip_prefix("name = \"")
-                    .and_then(|rest| rest.strip_suffix('\"'))
-            }) {
-                self.binary_name = Some(String::from(name))
-            } else if let Some(Some(version_str)) = self.version.is_none().then(|| {
-                line.strip_prefix("version = \"")
-                    .and_then(|rest| rest.strip_suffix('\"'))
-            }) {
-                self.version = Some(String::from(version_str))
+            if let Some(Some(name)) = self
+                .binary_name
+                .is_none()
+                .then(|| try_parse_field(line, "name"))
+            {
+                self.binary_name = Some(name)
+            } else if let Some(Some(version_str)) = self
+                .version
+                .is_none()
+                .then(|| try_parse_field(line, "version"))
+            {
+                self.version = Some(version_str)
             }
 
             if self.has_toml_fields() {
@@ -202,7 +209,7 @@ impl SearchDir {
                     let file_name = entry.file_name();
                     if !dry_run && file_name == TEMP_DIR {
                         fs::remove_dir_all(entry.path())?;
-                        println!("Reset contents of ~/build/tmp")
+                        println!("Reset contents of ~\\build\\tmp")
                     } else if file_name == SearchDir::Debian.name() {
                         SearchDir::Debian.scan(entry.path(), deb_files, dry_run)?
                     }

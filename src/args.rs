@@ -78,11 +78,8 @@ impl Args {
     #[allow(clippy::ptr_arg)]
     fn validate_version(version: &String) {
         Self::ensure_unique(version, "--version");
-        for num_str in version.split('.') {
-            if num_str.parse::<u16>().is_err() {
-                exit_err!("invalid version: '{version}'")
-            }
-        }
+        // Since Dpkg doesn't enforce semver like cargo does we will just trust the user has correctly formatted their
+        // version string. See: https://manpages.ubuntu.com/manpages/xenial/man5/deb-version.5.html
     }
 
     fn validate_path(name: String) -> PathBuf {
