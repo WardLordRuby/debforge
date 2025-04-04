@@ -56,18 +56,20 @@ impl Args {
         let toml = fs::File::open(self.project_dir.join("Cargo.toml"))?;
         let reader = BufReader::new(toml);
 
+        const PARSE_PATTERN: [char; 4] = [' ', '\'', '\"', '='];
+
         for line in reader.lines() {
             let line = line?;
-            let line = line.trim();
+            let line = line.trim_start();
 
             if let Some(Some(name)) = self.binary_name.is_none().then(|| {
-                line.strip_prefix("name = \"")
-                    .and_then(|rest| rest.strip_suffix('\"'))
+                line.strip_prefix("name")
+                    .map(|rest| rest.trim_matches(PARSE_PATTERN))
             }) {
                 self.binary_name = Some(String::from(name))
             } else if let Some(Some(version_str)) = self.version.is_none().then(|| {
-                line.strip_prefix("version = \"")
-                    .and_then(|rest| rest.strip_suffix('\"'))
+                line.strip_prefix("version")
+                    .map(|rest| rest.trim_matches(PARSE_PATTERN))
             }) {
                 self.version = Some(String::from(version_str))
             }
@@ -202,7 +204,7 @@ impl SearchDir {
                     let file_name = entry.file_name();
                     if !dry_run && file_name == TEMP_DIR {
                         fs::remove_dir_all(entry.path())?;
-                        println!("Reset contents of ~/build/tmp")
+                        println!("Reset contents of ~\\build\\tmp")
                     } else if file_name == SearchDir::Debian.name() {
                         SearchDir::Debian.scan(entry.path(), deb_files, dry_run)?
                     }
