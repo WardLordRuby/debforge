@@ -58,7 +58,14 @@ impl Args {
                 .map(|rest| rest.trim_matches([' ', '\'', '\"', '=']).to_string())
         }
 
-        let toml = fs::File::open(self.project_dir.join("Cargo.toml"))?;
+        let toml = fs::File::open(self.project_dir.join("Cargo.toml")).inspect_err(|err| {
+            if let io::ErrorKind::NotFound = err.kind() {
+                exit_err!(
+                    "failed to find 'Cargo.toml' at: '{}'",
+                    self.project_dir.display()
+                )
+            }
+        })?;
         let reader = BufReader::new(toml);
 
         for line in reader.lines() {
@@ -85,7 +92,7 @@ impl Args {
         }
 
         if !self.has_toml_fields() {
-            exit_err!("Failed to parse Cargo.toml")
+            exit_err!("failed to parse Cargo.toml")
         }
 
         if self.dry_run {
@@ -168,7 +175,7 @@ impl DebCollector for DebFiles {
     fn conditional_insert(&mut self, entry: &DirEntry, dry_run: bool) {
         if let Some(deb_file) = entry.debian_file() {
             if self.insert(deb_file, entry.path()).is_some() {
-                exit_err!("Found more than 1 {deb_file:?} file")
+                exit_err!("found more than 1 {deb_file:?} file")
             }
             if dry_run {
                 println!("Found {deb_file:?} file")
@@ -227,7 +234,7 @@ impl Forge {
         let dry_run = args.dry_run;
         let vars = Variables::from(args)?;
 
-        let mut deb_files = HashMap::new();
+        let mut deb_files = DebFiles::new();
 
         let binary_path = vars.get_binary_path();
         if binary_path.exists() {
@@ -236,7 +243,14 @@ impl Forge {
                 println!("Found Binary file")
             }
         } else {
-            exit_err!("Failed to find a binary at {}", binary_path.display())
+            exit_err!(
+                "failed to find Binary: '{}' at: '{}'",
+                vars.binary_name,
+                binary_path
+                    .parent()
+                    .expect("`get_binary_path` gives a location within a directory")
+                    .display()
+            )
         }
 
         for entry in fs::read_dir(&vars.project_dir)? {
@@ -256,7 +270,7 @@ impl Forge {
 
         for required in REQUIRED_DEB_FILES.iter() {
             if !deb_files.contains_key(required) {
-                exit_err!("Could not locate a {required:?} file")
+                exit_err!("could not locate a {required:?} file")
             }
         }
 

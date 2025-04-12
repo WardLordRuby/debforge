@@ -41,7 +41,7 @@ impl From<String> for Architecture {
             "x86_64-unknown-linux-gnu" | "amd" | "x86" | "x86_64" => Self::Amd64,
             "aarch64-unknown-linux-gnu" | "arm" | "aarch64" => Self::Arm64,
             _ => {
-                exit_err!("Invalid target/architecture: {value}");
+                exit_err!("invalid target/architecture: {value}");
             }
         }
     }
@@ -87,7 +87,7 @@ impl Args {
         let path = PathBuf::from(name);
 
         if path.is_file() {
-            exit_err!("Path must be a directory")
+            exit_err!("path must be a directory")
         }
 
         let exist_err = |path: &Path| exit_err!("{} does not exist", path.display());
