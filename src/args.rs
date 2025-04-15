@@ -65,7 +65,7 @@ impl Architecture {
 
 impl Args {
     fn ensure_unique(str: &str, from: &'static str) {
-        if ARGS.iter().any(|&arg| arg == str) {
+        if ARGS.contains(&str) {
             exit_err!("{from} requires an input")
         }
     }

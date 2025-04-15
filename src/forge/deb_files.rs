@@ -41,7 +41,7 @@ impl DebParser for &DirEntry {
                 return Some(FileType::Desktop);
             }
 
-            if ICON_FORMATS.iter().any(|&fmt| extension == fmt) {
+            if ICON_FORMATS.contains(&extension) {
                 return ICONS
                     .iter()
                     .find(|&icon| name_str.contains(icon.width()))

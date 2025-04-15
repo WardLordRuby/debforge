@@ -3,6 +3,7 @@ mod deb_files;
 use std::{
     collections::HashMap,
     env,
+    ffi::OsString,
     fs::{self, DirEntry},
     io::{self, BufRead, BufReader, BufWriter, Write},
     path::{Path, PathBuf},
@@ -191,15 +192,17 @@ enum SearchDir {
     Debian,
 }
 
-impl SearchDir {
-    const fn name(self) -> &'static str {
-        match self {
+impl PartialEq<SearchDir> for OsString {
+    fn eq(&self, other: &SearchDir) -> bool {
+        self == match other {
             SearchDir::Assets => "assets",
             SearchDir::Build => "build",
             SearchDir::Debian => "debian",
         }
     }
+}
 
+impl SearchDir {
     fn scan<P>(self, directory: P, deb_files: &mut DebFiles, dry_run: bool) -> io::Result<()>
     where
         P: AsRef<Path>,
@@ -217,7 +220,7 @@ impl SearchDir {
                     if !dry_run && file_name == TEMP_DIR {
                         fs::remove_dir_all(entry.path())?;
                         println!("Reset contents of ~\\build\\tmp")
-                    } else if file_name == SearchDir::Debian.name() {
+                    } else if file_name == SearchDir::Debian {
                         SearchDir::Debian.scan(entry.path(), deb_files, dry_run)?
                     }
                 }
@@ -237,12 +240,7 @@ impl Forge {
         let mut deb_files = DebFiles::new();
 
         let binary_path = vars.get_binary_path();
-        if binary_path.exists() {
-            deb_files.insert(FileType::Binary, binary_path);
-            if dry_run {
-                println!("Found Binary file")
-            }
-        } else {
+        if !binary_path.exists() {
             exit_err!(
                 "failed to find Binary: '{}' at: '{}'",
                 vars.binary_name,
@@ -253,14 +251,18 @@ impl Forge {
             )
         }
 
+        deb_files.insert(FileType::Binary, binary_path);
+        if dry_run {
+            println!("Found Binary file")
+        }
+
         for entry in fs::read_dir(&vars.project_dir)? {
             let entry = entry?;
             let file_type = entry.file_type()?;
 
             if file_type.is_dir() {
                 let file_name = entry.file_name();
-                if let Some(search_dir) = SEARCH_DIRS.iter().find(|valid| file_name == valid.name())
-                {
+                if let Some(search_dir) = SEARCH_DIRS.iter().find(|&&valid| file_name == valid) {
                     search_dir.scan(entry.path(), &mut deb_files, dry_run)?;
                 }
             } else if file_type.is_file() {
