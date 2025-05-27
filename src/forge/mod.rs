@@ -13,6 +13,7 @@ use crate::args::*;
 use deb_files::*;
 
 pub(crate) const PKG_NAME: &str = env!("CARGO_PKG_NAME");
+pub(crate) const TOML: &str = "Cargo.toml";
 
 const TEMP_DIR: &str = "tmp";
 const SEARCH_DIRS: [SearchDir; 3] = [SearchDir::Assets, SearchDir::Build, SearchDir::Debian];
@@ -22,8 +23,7 @@ const REQUIRED_DEB_FILES: [FileType; 3] =
 #[macro_export]
 macro_rules! exit_err {
     ($($arg:tt)*) => {{
-        eprint!("{}: Error ", $crate::forge::PKG_NAME);
-        eprintln!($($arg)*);
+        eprintln!("{}: Error {}", $crate::forge::PKG_NAME, format_args!($($arg)*));
         std::process::exit(1);
     }};
 }
@@ -59,10 +59,10 @@ impl Args {
                 .map(|rest| rest.trim_matches([' ', '\'', '\"', '=']).to_string())
         }
 
-        let toml = fs::File::open(self.project_dir.join("Cargo.toml")).inspect_err(|err| {
+        let toml = fs::File::open(self.project_dir.join(TOML)).inspect_err(|err| {
             if let io::ErrorKind::NotFound = err.kind() {
                 exit_err!(
-                    "failed to find 'Cargo.toml' at: '{}'",
+                    "failed to find '{TOML}' at: '{}'",
                     self.project_dir.display()
                 )
             }
@@ -93,11 +93,11 @@ impl Args {
         }
 
         if !self.has_toml_fields() {
-            exit_err!("failed to parse Cargo.toml")
+            exit_err!("failed to parse {TOML}")
         }
 
         if self.dry_run {
-            println!("Parsed Cargo.toml")
+            println!("Parsed {TOML}")
         }
 
         Ok(())

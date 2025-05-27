@@ -3,7 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::exit_err;
+use crate::{exit_err, forge::TOML};
 
 const BUILD_DIR: &str = "build";
 const ARGS: [&str; 10] = [
@@ -135,8 +135,8 @@ impl Args {
                 "-h" | "--help" => {
                     println!(
                         "debforge v{} - Usage:\n    \
-                        [-b binary-name](optional | default: will attempt to parse Cargo.toml)\n    \
-                        [-v version](optional | default: will attempt to parse Cargo.toml)\n    \
+                        [-b binary-name](optional | default: will attempt to parse {TOML})\n    \
+                        [-v version](optional | default: will attempt to parse {TOML})\n    \
                         [-t target](optional | default: x86_64-unknown-linux-gnu)\n    \
                         [-p project-path](optional | default: current directory)\n    \
                         [-d dry-run](optional | will display all found relevant deb files)",
